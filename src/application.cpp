@@ -48,7 +48,8 @@ void Application::initVulkan(const uint32_t width, const uint32_t height) {
 
 void Application::run()
 {
-    window->run([this]() {
-        renderer->render();
-    });
+    window->run(
+        [this]() {renderer->update();},
+        [this]() {renderer->render();}
+    );
 }

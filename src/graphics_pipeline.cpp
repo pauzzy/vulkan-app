@@ -9,11 +9,43 @@ GraphicsPipeline::GraphicsPipeline(
     vertShaderModule = createShaderModule(ASSET_DIR "/shader/shader.vert", shaderc_vertex_shader);
     fragShaderModule = createShaderModule(ASSET_DIR "/shader/shader.frag", shaderc_fragment_shader);
 
+    // TODO: needs to be redone:
+        std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings = {
+            VkDescriptorSetLayoutBinding {
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+            }
+        };
+        
+        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = 1, 
+            .pBindings = descriptorSetLayoutBindings.data()
+        };
+
+        VkDescriptorSetLayout descriptorSetLayout = nullptr;
+        vkCreateDescriptorSetLayout(
+            device.getLogicalDeviceHandle(), 
+            &descriptorSetLayoutCreateInfo, 
+            nullptr,  
+            &descriptorSetLayout
+        );
+
+        VkPushConstantRange pushConstantRange {
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .offset = 0, 
+            .size = sizeof(glm::mat4)
+        };
+
     //-- create graphics pipeline
     VkPipelineLayoutCreateInfo graphicsPipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
-        .pushConstantRangeCount = 0
+        .setLayoutCount = 1,
+        .pSetLayouts = &descriptorSetLayout,
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &pushConstantRange
     };
 
     if (vkCreatePipelineLayout(device.getLogicalDeviceHandle(), &graphicsPipelineLayoutCreateInfo, nullptr, &graphicsPipelineLayout) != VK_SUCCESS) {
@@ -90,7 +122,7 @@ GraphicsPipeline::GraphicsPipeline(
     VkPipelineRasterizationStateCreateInfo rasterizationCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .polygonMode = VK_POLYGON_MODE_FILL,
-        .cullMode = VK_CULL_MODE_BACK_BIT,
+        .cullMode = VK_CULL_MODE_NONE,
         .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
         .lineWidth = 1.0f
     };
@@ -148,6 +180,12 @@ GraphicsPipeline::GraphicsPipeline(
     if (vkCreateGraphicsPipelines(device.getLogicalDeviceHandle(), nullptr, 1, &graphicsPipelineCreateInfo, nullptr, &graphicsPipelineHandle) != VK_SUCCESS) {
         throw std::runtime_error("failed creating graphics pipeline!");
     }
+
+    vkDestroyDescriptorSetLayout(
+        device.getLogicalDeviceHandle(),
+        descriptorSetLayout,
+        nullptr
+    );
 }
 
 GraphicsPipeline::~GraphicsPipeline()

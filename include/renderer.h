@@ -3,11 +3,13 @@
 #include <array>
 #include <vector>
 #include <Volk/volk.h>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "window.h"
 #include "swapchain.h"
 #include "graphics_pipeline.h"
 #include "buffer.h"
+
 
 class Renderer {
 public:
@@ -19,6 +21,7 @@ public:
     );
     ~Renderer();
 
+    void update();
     void render();
 
 private:
@@ -47,4 +50,8 @@ private:
 
     std::unique_ptr<Buffer<Vertex>> vertexBuffer;
     std::unique_ptr<Buffer<uint32_t>> indexBuffer;
+    std::unique_ptr<Buffer<Matrices>> uniformBuffer;
+
+    VkDescriptorPool descriptorPool = nullptr;
+    VkDescriptorSet descriptorSet = nullptr;
 };

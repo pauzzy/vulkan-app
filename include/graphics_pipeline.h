@@ -18,6 +18,7 @@ public:
     ~GraphicsPipeline();
 
     VkPipeline getGraphicsPipelineHandle() const { return graphicsPipelineHandle; }
+    VkPipelineLayout getGraphicsPipelineLayout() const { return graphicsPipelineLayout; }
 private: 
     VkShaderModule createShaderModule(
         const std::string_view  filepath, 

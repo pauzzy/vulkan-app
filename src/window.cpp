@@ -32,11 +32,16 @@ void Window::destroyWindow()
     glfwTerminate();
 }
 
-void Window::run(std::function<void()> renderFunc)
-{
+void Window::run(
+    std::function<void()> updateFunc, 
+    std::function<void()> renderFunc
+) {
     while (!glfwWindowShouldClose(handle)) {
+        double startTime = glfwGetTime();
         glfwPollEvents();
+        updateFunc();
         renderFunc();
+        deltaTime = glfwGetTime() - startTime;
     }
 }
 

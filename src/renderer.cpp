@@ -18,7 +18,9 @@ const std::vector<Vertex> vertices {
 const std::vector<uint32_t> indices {
 	0, 1, 2
 };
-	
+
+
+glm::mat4 model;
 
 Renderer::Renderer(Window& window, Device &device, Swapchain &swapchain, GraphicsPipeline &graphicsPipeline) :
 window(window), device(device), swapchain(swapchain), graphicsPipeline(graphicsPipeline)
@@ -37,12 +39,119 @@ window(window), device(device), swapchain(swapchain), graphicsPipeline(graphicsP
 		indices,
 		VK_BUFFER_USAGE_INDEX_BUFFER_BIT
 	);
+
+	float aspectRatio = 
+		static_cast<float>(swapchain.getSwapchainWidth()) / swapchain.getSwapchainHeight();
+
+	std::vector<Matrices> matrices {
+		Matrices {
+			.view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f)),
+			.projection = glm::perspective(glm::radians(60.f), aspectRatio, 0.1f, 100.f)
+		}
+	};
+
+	uniformBuffer = std::make_unique<Buffer<Matrices>>(
+		device,
+		matrices,
+		VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+	);
+
+	std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings = {
+		VkDescriptorSetLayoutBinding {
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+		}
+	};
+	
+	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		.bindingCount = 1, 
+		.pBindings = descriptorSetLayoutBindings.data()
+	};
+
+	VkDescriptorSetLayout descriptorSetLayout = nullptr;
+	vkCreateDescriptorSetLayout(
+		device.getLogicalDeviceHandle(), 
+		&descriptorSetLayoutCreateInfo, 
+		nullptr,  
+		&descriptorSetLayout
+	);
+
+	VkDescriptorPoolSize descriptorPoolSize {
+		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.descriptorCount = 1
+	};
+
+	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+		.maxSets = 1, 
+		.poolSizeCount = 1,
+		.pPoolSizes = &descriptorPoolSize
+	};
+
+	vkCreateDescriptorPool(
+		device.getLogicalDeviceHandle(),
+		&descriptorPoolCreateInfo,
+		nullptr,
+		&descriptorPool
+	);
+
+	VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+		.descriptorPool = descriptorPool,
+		.descriptorSetCount = 1,
+		.pSetLayouts = &descriptorSetLayout
+	};
+
+	vkAllocateDescriptorSets(
+		device.getLogicalDeviceHandle(), 
+		&descriptorSetAllocateInfo,
+		&descriptorSet
+	);
+
+	VkDescriptorBufferInfo descriptorBufferInfo {
+		.buffer = uniformBuffer->getBufferHandle(),
+		.offset = 0,
+		.range = matrices.size() * sizeof(Matrices)
+	};
+
+	VkWriteDescriptorSet writeDescriptorSet {
+		.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, 
+		.dstSet = descriptorSet,
+		.dstBinding = 0,
+		.dstArrayElement = 0,
+		.descriptorCount = 1,
+		.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		.pBufferInfo = &descriptorBufferInfo
+	};
+
+	vkUpdateDescriptorSets(
+		device.getLogicalDeviceHandle(),
+		1,
+		&writeDescriptorSet,
+		0,
+		nullptr
+	);
+
+	vkDestroyDescriptorSetLayout(
+		device.getLogicalDeviceHandle(),
+		descriptorSetLayout,
+		nullptr
+	);
+
+	model = glm::mat4(1.0f);
 }
 
 Renderer::~Renderer()
 {
+	indexBuffer.reset();
 	vertexBuffer.reset();
-
+	uniformBuffer.reset();
+	
+	if (descriptorPool) vkDestroyDescriptorPool(device.getLogicalDeviceHandle(), descriptorPool, nullptr);
+	
 	if (timelineSemaphore) vkDestroySemaphore(device.getLogicalDeviceHandle(), timelineSemaphore, nullptr);
     for (FrameResources& res : frameResources) {
         vkDestroySemaphore(device.getLogicalDeviceHandle(), res.imageAcquiredSemaphore, nullptr);
@@ -120,6 +229,14 @@ void Renderer::handleSwapchainRecreation()
 		swapchain.create(window.getSurfaceHandle(), _width, _height);
         requireSwapchainRecreate = false;
     }
+}
+
+void Renderer::update() {
+	model = glm::rotate(
+		model, 
+		glm::radians(10.f * static_cast<float>(window.getDeltaTime()))
+		, glm::vec3(0.0f, 1.0f, 0.0f)
+	);
 }
 
 void Renderer::render()
@@ -258,12 +375,12 @@ void Renderer::render()
 		vkCmdSetScissor(res.commandBuffer, 0, 1, &scissor);
 
 		vkCmdBindPipeline(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline.getGraphicsPipelineHandle());
-		
+		vkCmdBindDescriptorSets(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline.getGraphicsPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
 		VkBuffer vertexBufferHandle = vertexBuffer->getBufferHandle();
 		VkDeviceSize offset = 0;
 		vkCmdBindVertexBuffers(res.commandBuffer, 0, 1, &vertexBufferHandle, &offset);
 		vkCmdBindIndexBuffer(res.commandBuffer, indexBuffer->getBufferHandle(), 0, VK_INDEX_TYPE_UINT32);
-
+		vkCmdPushConstants(res.commandBuffer, graphicsPipeline.getGraphicsPipelineLayout(), VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &model);
 		vkCmdDrawIndexed(res.commandBuffer, static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 	}
 	vkCmdEndRendering(res.commandBuffer);

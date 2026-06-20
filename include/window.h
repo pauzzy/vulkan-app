@@ -6,8 +6,6 @@
 #include <Volk/volk.h>
 #include <GLFW/glfw3.h>
 
-
-
 struct GLFWwindow;
 
 class Window {
@@ -19,7 +17,10 @@ public:
     );
     void destroyWindow();
 
-    void run(std::function<void()> renderFunc);
+    void run(
+        std::function<void()> updateFunc, 
+        std::function<void()> renderFunc
+    );
 
     void createWindowSurface(VkInstance instance);
     void destroyWindowSurface(VkInstance instance);
@@ -29,9 +30,12 @@ public:
 
     GLFWwindow* getHandle() const { return handle; }
     VkSurfaceKHR getSurfaceHandle() const { return surfaceHandle; } 
+    double getDeltaTime() const { return deltaTime; }
+
 private:
     uint32_t width = 0;
     uint32_t height = 0;
     GLFWwindow* handle = nullptr;
     VkSurfaceKHR surfaceHandle = nullptr;
+    double deltaTime = 0;
 };
