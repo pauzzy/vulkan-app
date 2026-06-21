@@ -16,6 +16,9 @@ target_sources(${EXECUTABLE_NAME} PRIVATE
     src/swapchain.cpp
     src/graphics_pipeline.cpp
     src/renderer.cpp
+    src/camera.cpp
+    src/input.cpp
+    src/geometry.cpp
 )
 
 target_include_directories(${EXECUTABLE_NAME} PRIVATE

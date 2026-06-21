@@ -1,4 +1,3 @@
-
 #include "window.h"
 
 Window::Window(
@@ -24,6 +23,11 @@ Window::Window(
     if (!handle) { 
         throw std::runtime_error("failed creating window!");
     }
+
+    input = std::make_unique<Input>(
+        handle,
+        GLFW_CURSOR_DISABLED
+    );
 }
 
 void Window::destroyWindow()

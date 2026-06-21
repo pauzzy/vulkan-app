@@ -10,3 +10,8 @@ struct Matrices {
 	glm::mat4 view;
 	glm::mat4 projection;
 };
+
+void createPlane(
+    std::vector<Vertex>& vertices, 
+    std::vector<uint32_t>& indices
+);

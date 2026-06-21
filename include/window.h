@@ -6,7 +6,7 @@
 #include <Volk/volk.h>
 #include <GLFW/glfw3.h>
 
-struct GLFWwindow;
+#include "input.h"
 
 class Window {
 public:
@@ -31,6 +31,7 @@ public:
     GLFWwindow* getHandle() const { return handle; }
     VkSurfaceKHR getSurfaceHandle() const { return surfaceHandle; } 
     double getDeltaTime() const { return deltaTime; }
+    Input& getInput() const { return *input; }
 
 private:
     uint32_t width = 0;
@@ -38,4 +39,6 @@ private:
     GLFWwindow* handle = nullptr;
     VkSurfaceKHR surfaceHandle = nullptr;
     double deltaTime = 0;
+
+    std::unique_ptr<Input> input;
 };

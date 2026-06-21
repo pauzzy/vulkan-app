@@ -1,6 +1,58 @@
 #include "buffer.h"
 template <typename T>
-Buffer<T>::Buffer(Device& device, const std::vector<T>& data, VkBufferUsageFlags usage) : device(device) {
+Buffer<T>::Buffer(
+    Device& device, 
+    const std::vector<T>& data, 
+    VkBufferUsageFlags usage,
+    bool persistentMapping
+) : device(device) {
+    if (!persistentMapping) {
+        createDeviceLocalBuffer(data, usage);
+    }
+    else {
+        createPersistentMappedBuffer(data, usage);
+    }
+}
+
+template <typename T>
+Buffer<T>::~Buffer() {        
+    if (bufferHandle) vmaDestroyBuffer(device.getVmaAllocator(), bufferHandle, bufferAllocation);
+}
+
+template <typename T>
+uint32_t Buffer<T>::getMemoryTypeIndex(
+    VkMemoryRequirements                    memoryRequirements, 
+    std::vector<VkMemoryPropertyFlagBits>&  memoryPropertyFlags
+) {
+    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties = {};
+    vkGetPhysicalDeviceMemoryProperties(device.getPhysicalDeviceHandle(), &physicalDeviceMemoryProperties);
+
+    uint32_t memTypeIndex = 0; 
+    for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; ++i) {
+        if (memoryRequirements.memoryTypeBits & (1 << i)) {
+            bool _memTypeSuitable = true;
+            for (size_t j = 0; j < memoryPropertyFlags.size(); ++j) {
+                if (
+                    !(physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & 
+                    memoryPropertyFlags[j])
+                ) {
+                    _memTypeSuitable = false;
+                    break;
+                }
+            }
+            
+            if (_memTypeSuitable) {
+                memTypeIndex = i;
+            }
+        }         
+    }
+
+    return memTypeIndex;
+}
+
+template <typename T>
+void Buffer<T>::createDeviceLocalBuffer(const std::vector<T>& data, VkBufferUsageFlags usage)
+{
     size_t dataByteSize = sizeof(data[0]) * data.size();
 
     VkBufferCreateInfo stagingBufferCreateInfo {
@@ -112,39 +164,37 @@ Buffer<T>::Buffer(Device& device, const std::vector<T>& data, VkBufferUsageFlags
 }
 
 template <typename T>
-Buffer<T>::~Buffer() {        
-    if (bufferHandle) vmaDestroyBuffer(device.getVmaAllocator(), bufferHandle, bufferAllocation);
-}
+void Buffer<T>::createPersistentMappedBuffer(const std::vector<T>& data, VkBufferUsageFlags usage)
+{
+    size_t dataByteSize = sizeof(data[0]) * data.size();
 
-template <typename T>
-uint32_t Buffer<T>::getMemoryTypeIndex(
-    VkMemoryRequirements                    memoryRequirements, 
-    std::vector<VkMemoryPropertyFlagBits>&  memoryPropertyFlags
-) {
-    VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties = {};
-    vkGetPhysicalDeviceMemoryProperties(device.getPhysicalDeviceHandle(), &physicalDeviceMemoryProperties);
+    VkBufferCreateInfo bufferCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = dataByteSize,
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE
+    };
+    
+    VmaAllocationCreateInfo bufferAllocationCreateInfo {
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+            VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .usage = VMA_MEMORY_USAGE_AUTO
+    };
 
-    uint32_t memTypeIndex = 0; 
-    for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; ++i) {
-        if (memoryRequirements.memoryTypeBits & (1 << i)) {
-            bool _memTypeSuitable = true;
-            for (size_t j = 0; j < memoryPropertyFlags.size(); ++j) {
-                if (
-                    !(physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & 
-                    memoryPropertyFlags[j])
-                ) {
-                    _memTypeSuitable = false;
-                    break;
-                }
-            }
-            
-            if (_memTypeSuitable) {
-                memTypeIndex = i;
-            }
-        }         
+    VmaAllocationInfo bufferAllocationInfo = {};
+    if (vmaCreateBuffer(
+        device.getVmaAllocator(),
+        &bufferCreateInfo,
+        &bufferAllocationCreateInfo,
+        &bufferHandle,
+        &bufferAllocation,
+        &bufferAllocationInfo
+    ) != VK_SUCCESS) {
+        throw std::runtime_error("failed creating buffer!");
     }
 
-    return memTypeIndex;
+    mappedMemAddr = bufferAllocationInfo.pMappedData;
+    memcpy(mappedMemAddr, data.data(), dataByteSize);
 }
 
 //only for learning reasons
