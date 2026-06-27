@@ -34,15 +34,15 @@ void Application::initVulkan(const uint32_t width, const uint32_t height) {
         window->getSurfaceHandle(),
         width, height
     );
-    graphicsPipeline = std::make_unique<GraphicsPipeline>(
-        *device,
-        *swapchain
-    );
     renderer = std::make_unique<Renderer>(
         *window,
         *device,
+        *swapchain
+    );
+    graphicsPipeline = std::make_unique<GraphicsPipeline>(
+        *device,
         *swapchain,
-        *graphicsPipeline
+        renderer->getDescriptorSetLayouts()
     );
 }
 
@@ -50,6 +50,6 @@ void Application::run()
 {
     window->run(
         [this]() {renderer->update();},
-        [this]() {renderer->render();}
+        [this]() {renderer->render(*graphicsPipeline);}
     );
 }

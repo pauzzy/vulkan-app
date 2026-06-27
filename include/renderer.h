@@ -9,6 +9,7 @@
 #include "swapchain.h"
 #include "graphics_pipeline.h"
 #include "buffer.h"
+#include "texture.h"
 #include "camera.h"
 
 
@@ -17,13 +18,14 @@ public:
     Renderer(
         Window&             window,
         Device&             device,
-        Swapchain&          swapchain,
-        GraphicsPipeline&   graphicsPipeline
+        Swapchain&          swapchain
     );
     ~Renderer();
 
     void update();
-    void render();
+    void render(GraphicsPipeline& graphicsPipeline);
+
+    std::vector<VkDescriptorSetLayout>& getDescriptorSetLayouts() { return descriptorSetLayouts; }
 
 private:
     void createSyncResources();
@@ -35,15 +37,13 @@ private:
         VkCommandPool commandPool = nullptr;
         VkCommandBuffer commandBuffer = nullptr;
         VkSemaphore imageAcquiredSemaphore = nullptr;
-        std::unique_ptr<Buffer<Matrices>> uniformBuffer;
+        std::unique_ptr<Buffer<RendererData>> uniformBuffer;
         VkDescriptorSet descriptorSet = nullptr;
     };
 
     Window& window;
     Device& device;
     Swapchain& swapchain;
-    GraphicsPipeline& graphicsPipeline;
-
     static const size_t MaxFramesInFlight = 2;
 
     std::array<FrameResources, MaxFramesInFlight> frameResources;
@@ -54,10 +54,14 @@ private:
 
     std::unique_ptr<Buffer<Vertex>> vertexBuffer;
     std::unique_ptr<Buffer<uint32_t>> indexBuffer;
+    std::unique_ptr<Texture> texture;
 
     VkDescriptorPool descriptorPool = nullptr;
 
     // -- logic
     std::unique_ptr<Camera> camera;
-    Matrices matrices;
+    RendererData rendererData;
+
+    VkDescriptorSet descriptorSet = nullptr;
+    std::vector<VkDescriptorSetLayout> descriptorSetLayouts;
 };

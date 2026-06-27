@@ -22,8 +22,9 @@ private:
     const float Z_NEAR = 0.1f;
     const float Z_FAR = 100.0f;
 
-    float moveSpeed = 10.f;
-    float mouseSens = .1f;
+    float moveSpeed = 10.0f;
+    float moveRunSpeedMultiplier = 2.0f;
+    float mouseSens = 0.1f;
 
     float yaw = 90.0f;
     float pitch = 0.0f;

@@ -50,8 +50,12 @@ void Camera::update()
     if (glm::length(inputVec) > 0) {
         inputVec = glm::normalize(inputVec);
 
+        float speed = input.getKeyPressed(GLFW_KEY_LEFT_SHIFT) ? 
+            moveSpeed * moveRunSpeedMultiplier :
+            moveSpeed;
+
         eye += 
-            moveSpeed * 
+            speed * 
             static_cast<float>(window.getDeltaTime()) * 
             (front * inputVec.z + right * inputVec.x + WORLD_UP * inputVec.y);  
     }

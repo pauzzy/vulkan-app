@@ -13,7 +13,8 @@ class GraphicsPipeline {
 public:
     GraphicsPipeline(
         Device& device,
-        Swapchain& swapchain
+        Swapchain& swapchain,
+        std::vector<VkDescriptorSetLayout>& descriptorSetLayouts
     );
     ~GraphicsPipeline();
 

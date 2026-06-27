@@ -1,8 +1,8 @@
 #include "application.h"
 
 int main(int argc, char* argv[]) {
-    constexpr uint32_t WND_WIDTH  = 800;
-    constexpr uint32_t WND_HEIGHT = 600;
+    constexpr uint32_t WND_WIDTH  = 1200;
+    constexpr uint32_t WND_HEIGHT = 800;
     constexpr std::string_view WND_TITLE = "Vulkan";
 
     try {

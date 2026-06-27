@@ -5,18 +5,17 @@ std::vector<uint32_t> indices;
 
 glm::mat4 model;
 
-Renderer::Renderer(Window& window, Device &device, Swapchain &swapchain, GraphicsPipeline &graphicsPipeline) :
-window(window), device(device), swapchain(swapchain), graphicsPipeline(graphicsPipeline)
+Renderer::Renderer(Window& window, Device &device, Swapchain &swapchain) :
+window(window), device(device), swapchain(swapchain)
 {
 	createPlane(vertices, indices);
 
-	
 	float aspectRatio = 
 		static_cast<float>(swapchain.getSwapchainWidth()) / swapchain.getSwapchainHeight();
 
 	camera = std::make_unique<Camera>(window, aspectRatio);
 
-	matrices = Matrices {
+	rendererData = RendererData {
 		.view = camera->getView(),
 		.projection = camera->getProjection()
 	};
@@ -40,10 +39,14 @@ window(window), device(device), swapchain(swapchain), graphicsPipeline(graphicsP
 	);
 
 	model = glm::mat4(1.0f);
+	
+
+
 }
 
 Renderer::~Renderer()
 {
+	texture.reset();
 	indexBuffer.reset();
 	vertexBuffer.reset();
 	
@@ -114,59 +117,140 @@ void Renderer::createCommandBuffers()
 
 void Renderer::createUniformBuffers()
 {
- 	std::vector<Matrices> matricesVec {
-		matrices
-	};
+	// -- UBO
+	{
+		std::vector<RendererData> rendererDataVec {
+			rendererData
+		};
 
-	std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings = {
-		VkDescriptorSetLayoutBinding {
-			.binding = 0,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.descriptorCount = 1,
-			.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-		}
-	};
-	
-	VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-		.bindingCount = 1, 
-		.pBindings = descriptorSetLayoutBindings.data()
-	};
+		std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings = {
+			VkDescriptorSetLayoutBinding {
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
+			}
+		};
+		
+		VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = 1, 
+			.pBindings = descriptorSetLayoutBindings.data()
+		};
 
-	VkDescriptorSetLayout descriptorSetLayout = nullptr;
-	vkCreateDescriptorSetLayout(
-		device.getLogicalDeviceHandle(), 
-		&descriptorSetLayoutCreateInfo, 
-		nullptr,  
-		&descriptorSetLayout
-	);
-
-	VkDescriptorPoolSize descriptorPoolSize {
-		.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		.descriptorCount = MaxFramesInFlight
-	};
-
-	VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
-		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-		.maxSets = MaxFramesInFlight, 
-		.poolSizeCount = 1,
-		.pPoolSizes = &descriptorPoolSize
-	};
-
-	vkCreateDescriptorPool(
-		device.getLogicalDeviceHandle(),
-		&descriptorPoolCreateInfo,
-		nullptr,
-		&descriptorPool
-	);
-
-	for (FrameResources &res : frameResources) { 
-		res.uniformBuffer = std::make_unique<Buffer<Matrices>>(
-			device,
-			matricesVec,
-			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-			true
+		VkDescriptorSetLayout descriptorSetLayout = nullptr;
+		vkCreateDescriptorSetLayout(
+			device.getLogicalDeviceHandle(), 
+			&descriptorSetLayoutCreateInfo, 
+			nullptr,  
+			&descriptorSetLayout
 		);
+
+		descriptorSetLayouts.push_back(descriptorSetLayout);
+
+		std::array<VkDescriptorPoolSize, 2> descriptorPoolSizes {
+			VkDescriptorPoolSize {
+				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.descriptorCount = MaxFramesInFlight
+			},
+			VkDescriptorPoolSize {
+				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1
+			}
+		};
+
+		VkDescriptorPoolCreateInfo descriptorPoolCreateInfo {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.maxSets = MaxFramesInFlight + 1, 
+			.poolSizeCount = static_cast<uint32_t>(descriptorPoolSizes.size()),
+			.pPoolSizes = descriptorPoolSizes.data()
+		};
+
+		vkCreateDescriptorPool(
+			device.getLogicalDeviceHandle(),
+			&descriptorPoolCreateInfo,
+			nullptr,
+			&descriptorPool
+		);
+
+		for (FrameResources &res : frameResources) { 
+			res.uniformBuffer = std::make_unique<Buffer<RendererData>>(
+				device,
+				rendererDataVec,
+				VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+				true
+			);
+
+			VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.descriptorPool = descriptorPool,
+				.descriptorSetCount = 1,
+				.pSetLayouts = &descriptorSetLayout
+			};
+
+			vkAllocateDescriptorSets(
+				device.getLogicalDeviceHandle(), 
+				&descriptorSetAllocateInfo,
+				&res.descriptorSet
+			);
+
+			VkDescriptorBufferInfo descriptorBufferInfo {
+				.buffer = res.uniformBuffer->getBufferHandle(),
+				.offset = 0,
+				.range = sizeof(RendererData)
+			};
+
+			VkWriteDescriptorSet writeDescriptorSet {
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, 
+				.dstSet = res.descriptorSet,
+				.dstBinding = 0,
+				.dstArrayElement = 0,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+				.pBufferInfo = &descriptorBufferInfo
+			};
+
+			vkUpdateDescriptorSets(
+				device.getLogicalDeviceHandle(),
+				1,
+				&writeDescriptorSet,
+				0,
+				nullptr
+			);
+		}
+	}
+ 	
+
+	// -- Texture
+	{
+		std::string_view imageFilepath = ASSET_DIR "/imgs/burghausen.png";
+		texture = std::make_unique<Texture>(
+			device, 
+			imageFilepath
+		);
+
+		VkDescriptorSetLayoutBinding descriptorSetLayoutBinding {
+			.binding = 0,
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.descriptorCount = 1,
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+		};
+
+		VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = 1,
+			.pBindings = &descriptorSetLayoutBinding
+		};
+
+		VkDescriptorSetLayout descriptorSetLayout = nullptr;
+		vkCreateDescriptorSetLayout(
+			device.getLogicalDeviceHandle(),
+			&descriptorSetLayoutCreateInfo,
+			nullptr,
+			&descriptorSetLayout
+		);
+
+		descriptorSetLayouts.push_back(descriptorSetLayout);
 
 		VkDescriptorSetAllocateInfo descriptorSetAllocateInfo {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -176,25 +260,25 @@ void Renderer::createUniformBuffers()
 		};
 
 		vkAllocateDescriptorSets(
-			device.getLogicalDeviceHandle(), 
+			device.getLogicalDeviceHandle(),
 			&descriptorSetAllocateInfo,
-			&res.descriptorSet
+			&descriptorSet
 		);
 
-		VkDescriptorBufferInfo descriptorBufferInfo {
-			.buffer = res.uniformBuffer->getBufferHandle(),
-			.offset = 0,
-			.range = sizeof(Matrices)
+		VkDescriptorImageInfo descriptorImageInfo = {
+			.sampler = texture->getImageSampler(),
+			.imageView = texture->getImageView(),
+			.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 		};
 
-		VkWriteDescriptorSet writeDescriptorSet {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, 
-			.dstSet = res.descriptorSet,
+		VkWriteDescriptorSet writeDescriptorSet = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptorSet,
 			.dstBinding = 0,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-			.pBufferInfo = &descriptorBufferInfo
+			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			.pImageInfo = &descriptorImageInfo
 		};
 
 		vkUpdateDescriptorSets(
@@ -205,12 +289,6 @@ void Renderer::createUniformBuffers()
 			nullptr
 		);
 	}
-
-	vkDestroyDescriptorSetLayout(
-		device.getLogicalDeviceHandle(),
-		descriptorSetLayout,
-		nullptr
-	);	
 }
 
 void Renderer::handleSwapchainRecreation()
@@ -232,7 +310,7 @@ void Renderer::handleSwapchainRecreation()
 		float aspectRatio = 
 			static_cast<float>(swapchain.getSwapchainWidth()) / swapchain.getSwapchainHeight();
 		camera->setProjection(aspectRatio);
-		matrices.projection = camera->getProjection();
+		rendererData.projection = camera->getProjection();
 
         requireSwapchainRecreate = false;
     }
@@ -240,12 +318,12 @@ void Renderer::handleSwapchainRecreation()
 
 void Renderer::update() {
 	camera->update();
-	matrices.view = camera->getView();
-
+	rendererData.view = camera->getView();
+	rendererData.time = glfwGetTime();
 	window.getInput().resetState();
 }
 
-void Renderer::render()
+void Renderer::render(GraphicsPipeline& graphicsPipeline)
 {
 	handleSwapchainRecreation();
 
@@ -259,7 +337,8 @@ void Renderer::render()
         .pSemaphores = &timelineSemaphore,
         .pValues = &waitValue
     };
-	// Host waits for the Device to signal the wait value
+
+	// Host waits for the Device to signal wait value
     vkWaitSemaphores(device.getLogicalDeviceHandle(), &waitInfo, UINT64_MAX);
 
     FrameResources& res = frameResources[frameResIndex];
@@ -336,8 +415,9 @@ void Renderer::render()
 		.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 		.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
 		.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-		.clearValue{.color{0.01f, 0.01f, 0.01f, 1}}
+		.clearValue{ .color{0.2f, 0.2f, 0.2f, 1} }
 	};
+
 	VkRenderingAttachmentInfo depthAttachInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -369,7 +449,9 @@ void Renderer::render()
 		{
 			.x = 0, .y = 0,
 			.width = static_cast<float>(swapchain.getSwapchainWidth()),
-			.height = static_cast<float>(swapchain.getSwapchainHeight())
+			.height = static_cast<float>(swapchain.getSwapchainHeight()),
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f
 		};
 		vkCmdSetViewport(res.commandBuffer, 0, 1, &viewport);
 
@@ -382,9 +464,11 @@ void Renderer::render()
 
 		vkCmdBindPipeline(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline.getGraphicsPipelineHandle());
 
-		memcpy(res.uniformBuffer->getMappedMemAddr(), &matrices, sizeof(Matrices));
+		memcpy(res.uniformBuffer->getMappedMemAddr(), &rendererData, sizeof(RendererData));
 
 		vkCmdBindDescriptorSets(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline.getGraphicsPipelineLayout(), 0, 1, &res.descriptorSet, 0, nullptr);
+		vkCmdBindDescriptorSets(res.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline.getGraphicsPipelineLayout(), 1, 1, &descriptorSet, 0, nullptr);
+		
 		VkBuffer vertexBufferHandle = vertexBuffer->getBufferHandle();
 		VkDeviceSize offset = 0;
 		vkCmdBindVertexBuffers(res.commandBuffer, 0, 1, &vertexBufferHandle, &offset);
@@ -445,11 +529,13 @@ void Renderer::render()
 			.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT
 		}
 	};
+
 	VkCommandBufferSubmitInfo cmdSubmitInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
 		.commandBuffer = res.commandBuffer,
 	};
+	
 	VkSubmitInfo2 submitInfo
 	{
 		.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,

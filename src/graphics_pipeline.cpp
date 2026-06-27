@@ -2,48 +2,25 @@
 
 GraphicsPipeline::GraphicsPipeline(
     Device& device, 
-    Swapchain& swapchain
+    Swapchain& swapchain,
+    std::vector<VkDescriptorSetLayout>& descriptorSetLayouts
 ) : device(device)
 {
     // -- create shaders
     vertShaderModule = createShaderModule(ASSET_DIR "/shader/shader.vert", shaderc_vertex_shader);
     fragShaderModule = createShaderModule(ASSET_DIR "/shader/shader.frag", shaderc_fragment_shader);
 
-    // TODO: needs to be redone:
-        std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings = {
-            VkDescriptorSetLayoutBinding {
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-            }
-        };
-        
-        VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            .bindingCount = 1, 
-            .pBindings = descriptorSetLayoutBindings.data()
-        };
-
-        VkDescriptorSetLayout descriptorSetLayout = nullptr;
-        vkCreateDescriptorSetLayout(
-            device.getLogicalDeviceHandle(), 
-            &descriptorSetLayoutCreateInfo, 
-            nullptr,  
-            &descriptorSetLayout
-        );
-
-        VkPushConstantRange pushConstantRange {
-            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .offset = 0, 
-            .size = sizeof(glm::mat4)
-        };
+    VkPushConstantRange pushConstantRange {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0, 
+        .size = sizeof(glm::mat4)
+    };
 
     //-- create graphics pipeline
     VkPipelineLayoutCreateInfo graphicsPipelineLayoutCreateInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &descriptorSetLayout,
+        .setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size()),
+        .pSetLayouts = descriptorSetLayouts.data(),
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &pushConstantRange
     };
@@ -87,6 +64,12 @@ GraphicsPipeline::GraphicsPipeline(
             .binding = 0,
             .format = VK_FORMAT_R32G32B32A32_SFLOAT,
             .offset = offsetof(Vertex, color)
+        },
+        VkVertexInputAttributeDescription {
+            .location = 2, 
+            .binding = 0,
+            .format = VK_FORMAT_R32G32_SFLOAT,
+            .offset = offsetof(Vertex, uv)
         }
     };
 
@@ -181,11 +164,13 @@ GraphicsPipeline::GraphicsPipeline(
         throw std::runtime_error("failed creating graphics pipeline!");
     }
 
-    vkDestroyDescriptorSetLayout(
-        device.getLogicalDeviceHandle(),
-        descriptorSetLayout,
-        nullptr
-    );
+    for (VkDescriptorSetLayout& descriptorSetLayout : descriptorSetLayouts) {
+        vkDestroyDescriptorSetLayout(
+            device.getLogicalDeviceHandle(),
+            descriptorSetLayout,
+            nullptr
+        );
+    }
 }
 
 GraphicsPipeline::~GraphicsPipeline()

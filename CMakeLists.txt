@@ -2,6 +2,11 @@ cmake_minimum_required(VERSION 3.31)
 
 project("app")
 
+find_package(Vulkan REQUIRED COMPONENTS volk shaderc_combined)
+find_package(glfw3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+find_package(Stb REQUIRED)
+
 set(EXECUTABLE_NAME ${PROJECT_NAME})
 add_executable(${EXECUTABLE_NAME})
 
@@ -19,15 +24,13 @@ target_sources(${EXECUTABLE_NAME} PRIVATE
     src/camera.cpp
     src/input.cpp
     src/geometry.cpp
+    src/texture.cpp
 )
 
 target_include_directories(${EXECUTABLE_NAME} PRIVATE
     include/
+    ${Stb_INCLUDE_DIR}
 )
-
-find_package(Vulkan REQUIRED COMPONENTS volk shaderc_combined)
-find_package(glfw3 CONFIG REQUIRED)
-find_package(glm CONFIG REQUIRED)
 
 target_link_libraries(${EXECUTABLE_NAME} PRIVATE
     Vulkan::Vulkan
